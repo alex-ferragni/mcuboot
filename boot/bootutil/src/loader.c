@@ -4,6 +4,7 @@
  * Copyright (c) 2016-2020 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2019-2021 Arm Limited
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -50,6 +51,7 @@
 #include "bootutil/enc_key.h"
 #endif
 
+#include "bios/bios.h"
 #include "mcuboot_config/mcuboot_config.h"
 
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
@@ -490,8 +492,11 @@ boot_image_check(struct boot_loader_state *state, struct image_header *hdr,
 
     image_index = BOOT_CURR_IMG(state);
 
+    BOOT_LOG_INF("Validating image at 0x%08lX", fap->fa_off);
+
 #ifdef MCUBOOT_ENC_IMAGES
     if (MUST_DECRYPT(fap, image_index, hdr)) {
+        BOOT_LOG_INF("Image has to be decryted, loading decryption...");
         rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
         if (rc < 0) {
             FIH_RET(fih_rc);
@@ -734,6 +739,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
         }
 #endif
 
+        BOOT_LOG_INF("No image at 0x%08lX, invalid trailer has been erased", fap->fa_off);
         /* No bootable image in slot; continue booting from the primary slot. */
         fih_rc = fih_int_encode(1);
         goto out;
@@ -761,6 +767,7 @@ boot_validate_slot(struct boot_loader_state *state, int slot,
     if (!boot_is_header_valid(hdr, fap) || fih_not_eq(fih_rc, FIH_SUCCESS)) {
         if ((slot != BOOT_PRIMARY_SLOT) || ARE_SLOTS_EQUIVALENT()) {
             flash_area_erase(fap, 0, flash_area_get_size(fap));
+            BOOT_LOG_INF("Secondary image is invalid, erasing it");
             /* Image is invalid, erase it to prevent further unnecessary
              * attempts to validate and boot it.
              */
@@ -845,6 +852,7 @@ boot_validated_swap_type(struct boot_loader_state *state,
         /* Boot loader wants to switch to the secondary slot.
          * Ensure image is valid.
          */
+        BOOT_LOG_INF("Secondary image marked for update, verification engaged");
         FIH_CALL(boot_validate_slot, fih_rc, state, BOOT_SECONDARY_SLOT, bs);
         if (fih_not_eq(fih_rc, FIH_SUCCESS)) {
             if (fih_eq(fih_rc, fih_int_encode(1))) {
@@ -947,7 +955,7 @@ boot_copy_region(struct boot_loader_state *state,
                 hdr = boot_img_hdr(state, BOOT_PRIMARY_SLOT);
             }
 #endif
-            if (IS_ENCRYPTED(hdr)) {
+            if (IS_ENCRYPTED(hdr) && hdr->ih_magic == IMAGE_MAGIC) {
                 blk_sz = chunk_sz;
                 idx = 0;
                 if (off + bytes_copied < hdr->ih_hdr_size) {
@@ -1088,12 +1096,14 @@ boot_copy_image(struct boot_loader_state *state, struct boot_status *bs)
     }
 #endif
 
+    TEST_MCUBOOT_SWAP_MENU();
     BOOT_LOG_INF("Copying the secondary slot to the primary slot: 0x%zx bytes",
                  size);
     rc = boot_copy_region(state, fap_secondary_slot, fap_primary_slot, 0, 0, size);
     if (rc != 0) {
         return rc;
     }
+    TEST_MCUBOOT_SWAP_MENU();
 
 #if defined(MCUBOOT_OVERWRITE_ONLY_FAST)
     rc = boot_write_magic(fap_primary_slot);
@@ -1188,7 +1198,8 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         }
 
 #ifdef MCUBOOT_ENC_IMAGES
-        if (IS_ENCRYPTED(hdr)) {
+        if (IS_ENCRYPTED(hdr) && hdr->ih_magic == IMAGE_MAGIC) {
+        BOOT_LOG_INF("Loading primary encryption key");
             fap = BOOT_IMG_AREA(state, BOOT_PRIMARY_SLOT);
             rc = boot_enc_load(BOOT_CURR_ENC(state), image_index, hdr, fap, bs);
             assert(rc >= 0);
@@ -1211,6 +1222,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
         }
 
 #ifdef MCUBOOT_ENC_IMAGES
+        BOOT_LOG_INF("Loading secondary encryption key");
         hdr = boot_img_hdr(state, BOOT_SECONDARY_SLOT);
         if (IS_ENCRYPTED(hdr)) {
             fap = BOOT_IMG_AREA(state, BOOT_SECONDARY_SLOT);
@@ -1245,6 +1257,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
 
 #ifdef MCUBOOT_ENC_IMAGES
         for (slot = 0; slot < BOOT_NUM_SLOTS; slot++) {
+            boot_enc_init(BOOT_CURR_ENC(state), slot);
             rc = boot_read_enc_key(image_index, slot, bs);
             assert(rc == 0);
 
@@ -1262,7 +1275,7 @@ boot_swap_image(struct boot_loader_state *state, struct boot_status *bs)
     }
 
     swap_run(state, bs, copy_size);
-
+    BOOT_LOG_INF("Swap done");
 #ifdef MCUBOOT_VALIDATE_PRIMARY_SLOT
     extern int boot_status_fails;
     if (boot_status_fails > 0) {
@@ -1449,7 +1462,7 @@ boot_perform_update(struct boot_loader_state *state, struct boot_status *bs)
 #ifndef MCUBOOT_OVERWRITE_ONLY
     uint8_t swap_type;
 #endif
-
+    BOOT_LOG_INF("Performing update...");
     /* At this point there are no aborted swaps. */
 #if defined(MCUBOOT_OVERWRITE_ONLY)
     rc = boot_copy_image(state, bs);
@@ -1714,7 +1727,7 @@ boot_prepare_image_for_update(struct boot_loader_state *state,
          * operation. If a partial swap was detected, complete it.
          */
         if (!boot_status_is_reset(bs)) {
-
+            BOOT_LOG_INF("Partial swap detected, resuming");
 #if (BOOT_IMAGE_NUMBER > 1)
             boot_review_image_swap_types(state, true);
 #endif
@@ -1737,9 +1750,11 @@ boot_prepare_image_for_update(struct boot_loader_state *state,
             rc = boot_read_image_headers(state, false, bs);
             assert(rc == 0);
 
+            BOOT_LOG_INF("Partial swap complete");
             /* Swap has finished set to NONE */
             BOOT_SWAP_TYPE(state) = BOOT_SWAP_TYPE_NONE;
         } else {
+            BOOT_LOG_INF("No partial swap detected");
             /* There was no partial swap, determine swap type. */
             if (bs->swap_type == BOOT_SWAP_TYPE_NONE) {
                 BOOT_SWAP_TYPE(state) = boot_validated_swap_type(state, bs);

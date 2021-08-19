@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2019 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2019-2020 Arm Limited
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -320,20 +321,37 @@ boot_write_swap_size(const struct flash_area *fap, uint32_t swap_size)
 
 #ifdef MCUBOOT_ENC_IMAGES
 int
-boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
+boot_write_enc_key(const struct flash_area *fap, uint8_t first_slot, uint8_t num_slots,
         const struct boot_status *bs)
 {
     uint32_t off;
+    uint32_t min_off = UINT32_MAX;
     int rc;
 
-    off = boot_enc_key_off(fap, slot);
-    BOOT_LOG_DBG("writing enc_key; fa_id=%d off=0x%lx (0x%lx)",
-                 flash_area_get_id(fap), (unsigned long)off,
-                 (unsigned long)flash_area_get_off(fap) + off);
+    uint8_t buf[BOOT_ENC_KEY_SIZE * num_slots];
+    for (uint8_t i = 0; i<num_slots; ++i){
+        off = boot_enc_key_off(fap, first_slot + i);
+        min_off = min_off < off ? min_off : off;
+    }
+
+    for (uint8_t i = 0; i<num_slots; ++i){
+        memcpy(buf + BOOT_ENC_KEY_SIZE * (num_slots-1-i), bs->enckey[first_slot + i], BOOT_ENC_KEY_SIZE);
+        off = boot_enc_key_off(fap, first_slot + i);
+        min_off = min_off < off ? min_off : off;
+    }
+
+
+
 #if MCUBOOT_SWAP_SAVE_ENCTLV
+    #error "TBD"
     rc = flash_area_write(fap, off, bs->enctlv[slot], BOOT_ENC_TLV_ALIGN_SIZE);
 #else
-    rc = flash_area_write(fap, off, bs->enckey[slot], BOOT_ENC_KEY_SIZE);
+    rc = flash_area_write(fap, min_off, buf, BOOT_ENC_KEY_SIZE*num_slots);
+
+    MCUBOOT_LOG_DBG("writing %u enc_keys; fa_id=%d off=0x%lx (0x%lx)",
+                 num_slots, fap->fa_id, (unsigned long)min_off,
+                 (unsigned long)fap->fa_off + min_off);
+
 #endif
     if (rc != 0) {
         return BOOT_EFLASH;

@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2019 Linaro LTD
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2019-2020 Arm Limited
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -37,6 +38,7 @@
 #include "bootutil/sign_key.h"
 #include "bootutil/security_cnt.h"
 #include "bootutil/fault_injection_hardening.h"
+#include "bootutil/bootutil_log.h"
 
 #include "mcuboot_config/mcuboot_config.h"
 
@@ -358,6 +360,7 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
     fih_int security_counter_valid = FIH_FAILURE;
 #endif
 
+    BOOT_LOG_INF("Computing hash of image at 0x%08lX", fap->fa_off);
     rc = bootutil_img_hash(enc_state, image_index, hdr, fap, tmp_buf,
             tmp_buf_sz, hash, seed, seed_len);
     if (rc) {
@@ -515,6 +518,13 @@ bootutil_img_validate(struct enc_key_data *enc_state, int image_index,
 #endif
 
 out:
+    if (fih_rc == FIH_SUCCESS){
+        BOOT_LOG_INF("Signature matches");
+    }
+    else{
+        BOOT_LOG_INF("Signature doesn't match");
+    }
+
     if (rc) {
         fih_rc = fih_int_encode(rc);
     }

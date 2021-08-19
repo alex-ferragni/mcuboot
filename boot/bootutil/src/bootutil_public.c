@@ -5,6 +5,7 @@
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2019-2021 Arm Limited
  * Copyright (c) 2020 Nordic Semiconductor ASA
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -60,7 +61,11 @@ const uint32_t boot_img_magic[] = {
     0xf395c277,
     0x7fefd260,
     0x0f505235,
-    0x8079b62c,
+    0x8079b62c, 
+    0xc6d15839,
+    0x9fd2f489,
+    0x53595f6c,
+    0x5113555b
 };
 
 #define BOOT_MAGIC_ARR_SZ \

@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Copyright (c) 2019 JUUL Labs
+ * Copyright (c) 2021 CSEM SA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -114,10 +115,7 @@ swap_status_init(const struct boot_loader_state *state,
     assert(rc == 0);
 
 #ifdef MCUBOOT_ENC_IMAGES
-    rc = boot_write_enc_key(fap, 0, bs);
-    assert(rc == 0);
-
-    rc = boot_write_enc_key(fap, 1, bs);
+    rc = boot_write_enc_key(fap, 0, 2, bs);
     assert(rc == 0);
 #endif
 

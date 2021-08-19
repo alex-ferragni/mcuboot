@@ -2,6 +2,7 @@
 #
 # Copyright 2017-2020 Linaro Limited
 # Copyright 2019-2021 Arm Limited
+# Copyright 2021 CSEM SA
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -247,8 +248,11 @@ class BasedIntParamType(click.ParamType):
               help='When upgrading, save encrypted key TLVs instead of plain '
                    'keys. Enable when BOOT_SWAP_SAVE_ENCTLV config option '
                    'was set.')
-@click.option('-E', '--encrypt', metavar='filename',
-              help='Encrypt image using the provided public key. '
+@click.option('--plaintext', default=False, is_flag=True,
+              help='Do not encrypt image even when provided with -E. '
+                    '(Still provide encryption info in case of swap)')
+@click.option('-E', '--encrypt-key', metavar='filename',
+              help='Use the provided encryption key. '
                    '(Not supported in direct-xip or ram-load mode.)')
 @click.option('--encrypt-keylen', default='128',
               type=click.Choice(['128','256']),
@@ -288,7 +292,7 @@ class BasedIntParamType(click.ParamType):
               help='Specify the value of security counter. Use the `auto` '
               'keyword to automatically generate it from the image version.')
 @click.option('-v', '--version', callback=validate_version,  required=True)
-@click.option('--align', type=click.Choice(['1', '2', '4', '8']),
+@click.option('--align', type=click.Choice(['1', '2', '4', '8', '16', '32']),
               required=True)
 @click.option('--public-key-format', type=click.Choice(['hash', 'full']),
               default='hash', help='In what format to add the public key to '
@@ -299,9 +303,9 @@ class BasedIntParamType(click.ParamType):
                .hex extension, otherwise binary format is used''')
 def sign(key, public_key_format, align, version, pad_sig, header_size,
          pad_header, slot_size, pad, confirm, max_sectors, overwrite_only,
-         endian, encrypt_keylen, encrypt, infile, outfile, dependencies,
-         load_addr, hex_addr, erased_val, save_enctlv, security_counter,
-         boot_record, custom_tlv, rom_fixed):
+         endian, plaintext, encrypt_keylen, encrypt_key, infile, outfile, 
+         dependencies, load_addr, hex_addr, erased_val, save_enctlv, 
+         security_counter, boot_record, custom_tlv, rom_fixed):
 
     if confirm:
         # Confirmed but non-padded images don't make much sense, because
@@ -316,7 +320,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
                       security_counter=security_counter)
     img.load(infile)
     key = load_key(key) if key else None
-    enckey = load_key(encrypt) if encrypt else None
+    enckey = load_key(encrypt_key) if encrypt_key else None
     if enckey and key:
         if ((isinstance(key, keys.ECDSA256P1) and
              not isinstance(enckey, keys.ECDSA256P1Public))
@@ -347,7 +351,7 @@ def sign(key, public_key_format, align, version, pad_sig, header_size,
         else:
             custom_tlvs[tag] = value.encode('utf-8')
 
-    img.create(key, public_key_format, enckey, dependencies, boot_record,
+    img.create(key, public_key_format, enckey, plaintext, dependencies, boot_record,
                custom_tlvs, int(encrypt_keylen))
     img.save(outfile, hex_addr)
 

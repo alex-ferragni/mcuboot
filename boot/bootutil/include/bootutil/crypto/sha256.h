@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2017-2019 Linaro LTD
  * Copyright (c) 2017-2019 JUUL Labs
+ * Copyright (c) 2021 CSEM SA
  */
 
 /*
@@ -21,9 +22,14 @@
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
      defined(MCUBOOT_USE_TINYCRYPT) + \
-     defined(MCUBOOT_USE_CC310)) != 1
-    #error "One crypto backend must be defined: either CC310, MBED_TLS or TINYCRYPT"
+     defined(MCUBOOT_USE_CC310)) != 1 && !defined(MCUBOOT_USE_STM32H753_CRYP)
+    #error "One crypto backend must be defined if STM32H753_CRYP is not used: either CC310, MBED_TLS or TINYCRYPT"
 #endif
+
+#if defined(MCUBOOT_USE_STM32H753_CRYP)
+    #include <hash/stm32h753_sha256_glue.h>
+    #include <hash/stm32h753_sha256_types.h>
+#else /* MCUBOOT_USE_STM32H753_CRYP */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
     #include <mbedtls/sha256.h>
@@ -44,11 +50,38 @@
     #define BOOTUTIL_CRYPTO_SHA256_DIGEST_SIZE (32)
 #endif /* MCUBOOT_USE_CC310 */
 
+#endif /* MCUBOOT_USE_STM32H753_CRYP */
+
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if defined(MCUBOOT_USE_STM32H753_CRYP)
+static inline void bootutil_sha256_init(bootutil_sha256_context *ctx)
+{
+    stm32h753_sha256_init();
+}
+
+static inline void bootutil_sha256_drop(bootutil_sha256_context *ctx)
+{
+    (void)ctx;
+}
+
+static inline int bootutil_sha256_update(bootutil_sha256_context *ctx,
+                                         const void *data,
+                                         uint32_t data_len)
+{
+    return stm32h753_sha256_update(data, data_len);
+}
+
+static inline int bootutil_sha256_finish(bootutil_sha256_context *ctx,
+                                          uint8_t *output)
+{
+    return stm32h753_sha256_finish(output);
+}
+#else /* MCUBOOT_USE_STM32H753_CRYP */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
 typedef mbedtls_sha256_context bootutil_sha256_context;
@@ -133,6 +166,8 @@ static inline int bootutil_sha256_finish(bootutil_sha256_context *ctx,
     return 0;
 }
 #endif /* MCUBOOT_USE_CC310 */
+
+#endif /* MCUBOOT_USE_STM32H753_CRYP */
 
 #ifdef __cplusplus
 }

@@ -15,9 +15,14 @@
 #include "mcuboot_config/mcuboot_config.h"
 
 #if (defined(MCUBOOT_USE_MBED_TLS) + \
-     defined(MCUBOOT_USE_TINYCRYPT)) != 1
-    #error "One crypto backend must be defined: either MBED_TLS or TINYCRYPT"
+     defined(MCUBOOT_USE_TINYCRYPT)) != 1 && !defined(MCUBOOT_USE_STM32H753_CRYP)
+    #error "One crypto backend must be defined if STM32H753_CRYP is not used: either MBED_TLS or TINYCRYPT"
 #endif
+
+#if defined(MCUBOOT_USE_STM32H753_CRYP)
+	#include <cryp/stm32h753_aes_ctr_glue.h>
+	#include <cryp/stm32h753_aes_ctr_types.h>
+#else /* MCUBOOT_USE_STM32H753_CRYP */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
     #include <mbedtls/aes.h>
@@ -38,11 +43,48 @@
     #define BOOTUTIL_CRYPTO_AES_CTR_BLOCK_SIZE TC_AES_BLOCK_SIZE
 #endif /* MCUBOOT_USE_TINYCRYPT */
 
+#endif /* MCUBOOT_USE_STM32H753_CRYP */
+
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#if defined(MCUBOOT_USE_STM32H753_CRYP)
+
+static inline void bootutil_aes_ctr_init(bootutil_aes_ctr_context *ctx)
+{
+    (void)ctx;
+	stm32h753_aes_ctr_init();
+}
+
+static inline void bootutil_aes_ctr_drop(bootutil_aes_ctr_context *ctx)
+{
+    (void)ctx;
+	stm32h753_aes_ctr_drop();
+}
+
+static inline int bootutil_aes_ctr_set_key(bootutil_aes_ctr_context *ctx, const uint8_t *k)
+{
+    return stm32h753_aes_ctr_set_key(ctx, k, BOOTUTIL_CRYPTO_AES_CTR_KEY_SIZE);
+}
+
+static int _bootutil_aes_ctr_crypt(bootutil_aes_ctr_context *ctx, uint8_t *counter, const uint8_t *in, uint32_t inlen, uint32_t blk_off, uint8_t *out)
+{
+    return stm32h753_aes_ctr_encrypt(ctx, counter, in, inlen, blk_off, out);
+}
+
+static inline int bootutil_aes_ctr_encrypt(bootutil_aes_ctr_context *ctx, uint8_t *counter, const uint8_t *m, uint32_t mlen, uint32_t blk_off, uint8_t *c)
+{
+    return _bootutil_aes_ctr_crypt(ctx, counter, m, mlen, blk_off, c);
+}
+
+static inline int bootutil_aes_ctr_decrypt(bootutil_aes_ctr_context *ctx, uint8_t *counter, const uint8_t *c, uint32_t clen, uint32_t blk_off, uint8_t *m)
+{
+    return _bootutil_aes_ctr_crypt(ctx, counter, c, clen, blk_off, m);
+}
+#else /* MCUBOOT_USE_STM32H753_CRYP */
 
 #if defined(MCUBOOT_USE_MBED_TLS)
 typedef mbedtls_aes_context bootutil_aes_ctr_context;
@@ -118,6 +160,8 @@ static inline int bootutil_aes_ctr_decrypt(bootutil_aes_ctr_context *ctx, uint8_
     return _bootutil_aes_ctr_crypt(ctx, counter, c, clen, blk_off, m);
 }
 #endif /* MCUBOOT_USE_TINYCRYPT */
+
+#endif /* MCUBOOT_USE_STM32H753_CRYP */
 
 #ifdef __cplusplus
 }

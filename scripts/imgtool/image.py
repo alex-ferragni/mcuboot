@@ -1,6 +1,7 @@
 # Copyright 2018 Nordic Semiconductor ASA
 # Copyright 2017-2020 Linaro Limited
 # Copyright 2019-2021 Arm Limited
+# Copyright 2021 CSEM SA
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -85,7 +86,12 @@ boot_magic = bytes([
     0x77, 0xc2, 0x95, 0xf3,
     0x60, 0xd2, 0xef, 0x7f,
     0x35, 0x52, 0x50, 0x0f,
-    0x2c, 0xb6, 0x79, 0x80, ])
+    0x2c, 0xb6, 0x79, 0x80,
+    0x39, 0x58, 0xd1, 0xc6,
+    0x89, 0xf4, 0xd2, 0x9f,
+    0x6c, 0x5f, 0x59, 0x53,
+    0x5b, 0x55, 0x13, 0x51, ])
+
 
 STRUCT_ENDIAN_DICT = {
         'little': '<',
@@ -288,7 +294,7 @@ class Image():
                 format=PublicFormat.Raw)
         return cipherkey, ciphermac, pubk
 
-    def create(self, key, public_key_format, enckey, dependencies=None,
+    def create(self, key, public_key_format, enckey, plaintext, dependencies=None,
                sw_type=None, custom_tlvs=None, encrypt_keylen=128):
         self.enckey = enckey
 
@@ -461,8 +467,13 @@ class Image():
                             backend=default_backend())
             encryptor = cipher.encryptor()
             img = bytes(self.payload[self.header_size:])
-            self.payload[self.header_size:] = \
-                encryptor.update(img) + encryptor.finalize()
+            if plaintext:
+                self.payload[self.header_size:] = \
+                    img
+            else:
+                self.payload[self.header_size:] = \
+                    encryptor.update(img) + encryptor.finalize()
+
 
         self.payload += prot_tlv.get()
         self.payload += tlv.get()
@@ -516,11 +527,11 @@ class Image():
     def _trailer_size(self, write_size, max_sectors, overwrite_only, enckey,
                       save_enctlv, enctlv_len):
         # NOTE: should already be checked by the argument parser
-        magic_size = 16
+        magic_size = 32
         if overwrite_only:
             return MAX_ALIGN * 2 + magic_size
         else:
-            if write_size not in set([1, 2, 4, 8]):
+            if write_size not in set([1, 2, 4, 8, 16, 32]):
                 raise click.BadParameter("Invalid alignment: {}".format(
                     write_size))
             m = DEFAULT_MAX_SECTORS if max_sectors is None else max_sectors

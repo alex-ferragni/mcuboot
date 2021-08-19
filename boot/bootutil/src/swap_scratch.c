@@ -2,6 +2,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Copyright (c) 2019 JUUL Labs
+ * Copyright (c) 2021 CSEM SA
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,6 +28,12 @@
 #include "bootutil/bootutil_log.h"
 
 #include "mcuboot_config/mcuboot_config.h"
+
+#ifdef ENABLE_TEST
+
+#include "bios/bios.h"
+
+#endif /* ENABLE_TEST */
 
 MCUBOOT_LOG_MODULE_DECLARE(mcuboot);
 
@@ -541,6 +548,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
 
     if (bs->state == BOOT_STATUS_STATE_0) {
         BOOT_LOG_DBG("erasing scratch area");
+        BOOT_LOG_INF("- Secondary -> scratch");
         rc = boot_erase_region(fap_scratch, 0, flash_area_get_size(fap_scratch));
         assert(rc == 0);
 
@@ -578,8 +586,11 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         bs->state = BOOT_STATUS_STATE_1;
         BOOT_STATUS_ASSERT(rc == 0);
     }
-
+    #ifdef ENABLE_TEST
+        test_mcuboot_swap_menu();
+    #endif
     if (bs->state == BOOT_STATUS_STATE_1) {
+        BOOT_LOG_INF("- Primary -> secondary");
         rc = boot_erase_region(fap_secondary_slot, img_off, sz);
         assert(rc == 0);
 
@@ -599,8 +610,11 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
         bs->state = BOOT_STATUS_STATE_2;
         BOOT_STATUS_ASSERT(rc == 0);
     }
-
+    #ifdef ENABLE_TEST
+        test_mcuboot_swap_menu();
+    #endif
     if (bs->state == BOOT_STATUS_STATE_2) {
+        BOOT_LOG_INF("- Scratch -> primary");
         rc = boot_erase_region(fap_primary_slot, img_off, sz);
         assert(rc == 0);
 
@@ -638,10 +652,7 @@ boot_swap_sectors(int idx, uint32_t sz, struct boot_loader_state *state,
             assert(rc == 0);
 
 #ifdef MCUBOOT_ENC_IMAGES
-            rc = boot_write_enc_key(fap_primary_slot, 0, bs);
-            assert(rc == 0);
-
-            rc = boot_write_enc_key(fap_primary_slot, 1, bs);
+            rc = boot_write_enc_key(fap_primary_slot, 0, 2, bs);
             assert(rc == 0);
 #endif
             rc = boot_write_magic(fap_primary_slot);
@@ -720,6 +731,7 @@ swap_run(struct boot_loader_state *state, struct boot_status *bs,
     while (last_sector_idx >= 0) {
         sz = boot_copy_sz(state, last_sector_idx, &first_sector_idx);
         if (swap_idx >= (bs->idx - BOOT_STATUS_IDX_0)) {
+            BOOT_LOG_INF("Swapping sector %u of images...", last_sector_idx);
             boot_swap_sectors(first_sector_idx, sz, state, bs);
         }
 

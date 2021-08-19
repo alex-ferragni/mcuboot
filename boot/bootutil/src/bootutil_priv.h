@@ -4,6 +4,7 @@
  * Copyright (c) 2017-2020 Linaro LTD
  * Copyright (c) 2017-2019 JUUL Labs
  * Copyright (c) 2019-2021 Arm Limited
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -128,7 +129,7 @@ struct boot_status {
  *      (`MCUBOOT_ENC_IMAGES`).
  */
 
-extern const uint32_t boot_img_magic[4];
+extern const uint32_t boot_img_magic[8];
 
 #ifdef MCUBOOT_IMAGE_NUMBER
 #define BOOT_IMAGE_NUMBER          MCUBOOT_IMAGE_NUMBER
@@ -265,7 +266,7 @@ int boot_erase_region(const struct flash_area *fap, uint32_t off, uint32_t sz);
 bool boot_status_is_reset(const struct boot_status *bs);
 
 #ifdef MCUBOOT_ENC_IMAGES
-int boot_write_enc_key(const struct flash_area *fap, uint8_t slot,
+int boot_write_enc_key(const struct flash_area *fap, uint8_t first_slot, uint8_t num_slots,
                        const struct boot_status *bs);
 int boot_read_enc_key(int image_index, uint8_t slot, struct boot_status *bs);
 #endif

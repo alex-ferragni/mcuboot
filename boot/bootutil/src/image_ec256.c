@@ -3,6 +3,7 @@
  *
  * Copyright (c) 2016-2019 JUUL Labs
  * Copyright (c) 2017 Linaro LTD
+ * Copyright (c) 2021 CSEM SA
  *
  * Original license:
  *
@@ -27,6 +28,7 @@
 #include <string.h>
 
 #include "mcuboot_config/mcuboot_config.h"
+#include "bootutil/bootutil_log.h"
 
 #ifdef MCUBOOT_SIGN_EC256
 /*TODO: remove this after cypress port mbedtls to abstract crypto api */
@@ -202,7 +204,7 @@ bootutil_verify_sig(uint8_t *hash, uint32_t hlen, uint8_t *sig, size_t slen,
     bootutil_ecdsa_p256_context ctx;
     uint8_t *pubkey;
     uint8_t *end;
-
+    BOOT_LOG_INF("Comparing hash to header signature");
 #ifndef MCUBOOT_ECDSA_NEED_ASN1_SIG
     uint8_t signature[2 * NUM_ECC_BYTES];
 #endif
